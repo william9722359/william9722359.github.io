@@ -52,8 +52,18 @@
     skip: false,
     playing: false,
     timer: null,
-    autoTimer: null
+    autoTimer: null,
+    screen: "title",
+    lockUntil: 0
   };
+
+  function locked() {
+    return Date.now() < state.lockUntil;
+  }
+
+  function lockInput(ms) {
+    state.lockUntil = Date.now() + ms;
+  }
 
   function toast(msg) {
     el.toast.hidden = false;
@@ -83,9 +93,7 @@
     const src = SPRITES[name];
     if (!src) return;
     el.sprite.className = cls || "";
-    if (el.sprite.getAttribute("src") !== src) {
-      el.sprite.src = src;
-    }
+    if (el.sprite.getAttribute("src") !== src) el.sprite.src = src;
     el.sprite.hidden = false;
   }
 
@@ -118,7 +126,6 @@
     el.clicker.hidden = true;
     if (state.skip) {
       showFull();
-      setTimeout(() => advance(), 40);
       return;
     }
     state.timer = setInterval(() => {
@@ -151,10 +158,14 @@
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = c.text;
-      b.addEventListener("click", (e) => {
+      b.addEventListener("pointerup", (e) => {
+        e.preventDefault();
         e.stopPropagation();
+        if (state.screen !== "choice" || locked()) return;
         if (c.flag) state.flags[c.flag] = 1;
         el.choices.hidden = true;
+        state.screen = "play";
+        lockInput(180);
         if (window.DemoAudio) window.DemoAudio.playSe("choice");
         go(c.next);
       });
@@ -196,11 +207,14 @@
       el.line.textContent = text;
       state.typing = false;
       showChoices(node.choices);
+      state.screen = "choice";
+    } else if (state.playing) {
+      state.screen = "play";
     }
   }
 
   function advance() {
-    if (!state.playing) return;
+    if (state.screen !== "play" || !state.playing || locked()) return;
     if (!el.choices.hidden) return;
     if (state.typing) {
       showFull();
@@ -230,6 +244,8 @@
     if (hud) hud.hidden = false;
     document.getElementById("app").classList.add("playing");
     state.playing = true;
+    state.screen = "play";
+    lockInput(500);
     if (window.DemoAudio) {
       window.DemoAudio.unlock();
       window.DemoAudio.playSe("start");
@@ -251,11 +267,10 @@
   function setMenu(on) {
     const app = document.getElementById("app");
     app.classList.toggle("menu-on", on);
-    if (!on) app.classList.add("playing");
+    app.classList.toggle("playing", !on);
     if (el.textbox) el.textbox.hidden = on;
     const hud = document.getElementById("hud");
     if (hud) hud.hidden = on;
-    if (on) el.choices.hidden = true;
   }
 
   function hideAllScreens() {
@@ -274,6 +289,7 @@
     el.title.hidden = false;
     el.about.hidden = true;
     el.log.hidden = true;
+    state.screen = "title";
     document.getElementById("app").classList.remove("playing");
     setMenu(true);
     const cont = document.getElementById("btn-continue");
@@ -310,7 +326,7 @@
   }
 
   function openLog() {
-    setMenu(true);
+    state.screen = "log";
     el.log.hidden = false;
     el.logBody.innerHTML = state.history.map((h) => {
       const name = h.name ? `<b>${escapeHtml(h.name)}</b>` : "";
@@ -327,32 +343,37 @@
       .split("\n").join("<br>");
   }
 
-  el.textbox.addEventListener("click", advance);
-  document.getElementById("stage").addEventListener("click", (e) => {
-    if (!state.playing) return;
-    if (e.target.closest("#quick, #choices, #textbox, #title, #about, #log")) return;
-    advance();
-  });
-
-  function onTitleTap(id, fn) {
-    const node = document.getElementById(id);
+  function onTap(node, fn) {
     if (!node) return;
-    node.addEventListener("click", (e) => {
-      e.preventDefault();
+    node.addEventListener("pointerup", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       e.stopPropagation();
       fn(e);
     });
   }
 
+  el.textbox.addEventListener("pointerup", (e) => {
+    e.stopPropagation();
+    advance();
+  });
+  document.getElementById("stage").addEventListener("pointerup", (e) => {
+    if (e.target.closest("button, #quick, #choices, #textbox, #title, #about, #log")) return;
+    advance();
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (!el.log.hidden) { el.log.hidden = true; return; }
-      if (!el.about.hidden) { el.about.hidden = true; el.title.hidden = false; return; }
+      if (!el.log.hidden) {
+        el.log.hidden = true;
+        state.screen = state.playing ? (el.choices.hidden ? "play" : "choice") : "title";
+        return;
+      }
+      if (!el.about.hidden) { showTitle(); return; }
       showTitle();
       return;
     }
     if (e.key === "Control") state.skip = true;
-    if (!state.playing) return;
+    if (state.screen !== "play") return;
     if (e.key === " " || e.key === "Enter" || e.key === "z" || e.key === "Z") {
       e.preventDefault();
       advance();
@@ -362,7 +383,8 @@
     if (e.key === "Control") state.skip = false;
   });
 
-  document.getElementById("quick").addEventListener("click", (e) => {
+  document.getElementById("quick").addEventListener("pointerup", (e) => {
+    e.stopPropagation();
     const btn = e.target.closest("button");
     if (!btn) return;
     const act = btn.dataset.act;
@@ -375,25 +397,26 @@
     if (act === "skip") {
       state.skip = !state.skip;
       btn.classList.toggle("on", state.skip);
-      if (state.skip && state.playing) advance();
+      if (state.skip && state.typing) showFull();
     }
     if (act === "save") save();
     if (act === "title") showTitle();
   });
 
-  onTitleTap("btn-start", () => startGame(false));
-  onTitleTap("btn-continue", () => {
+  onTap(document.getElementById("btn-start"), () => startGame(false));
+  onTap(document.getElementById("btn-continue"), () => {
     if (load()) startGame(true);
   });
-  onTitleTap("btn-about", () => {
+  onTap(document.getElementById("btn-about"), () => {
     el.title.hidden = true;
     el.about.hidden = false;
+    state.screen = "about";
     setMenu(true);
   });
-  onTitleTap("btn-about-back", showTitle);
-  document.getElementById("btn-log-close").addEventListener("click", () => {
+  onTap(document.getElementById("btn-about-back"), showTitle);
+  onTap(document.getElementById("btn-log-close"), () => {
     el.log.hidden = true;
-    setMenu(!state.playing);
+    state.screen = state.playing ? (el.choices.hidden ? "play" : "choice") : "title";
   });
 
   ["classroom","campus","mrt","room","dusk"].forEach((k) => {
