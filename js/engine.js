@@ -1,5 +1,10 @@
 (() => {
   const SCRIPT = window.DEMO_SCRIPT;
+  if (!SCRIPT) {
+    const line = document.getElementById("line");
+    if (line) line.textContent = "劇本沒載入，請重新整理。";
+    return;
+  }
   const SAVE_KEY = "liuhe-demo-v1";
   const PACK = window.DEMO_ASSETS || { bg: {}, chara: {} };
   const BGS = {
@@ -223,6 +228,7 @@
     if (el.textbox) el.textbox.hidden = false;
     const hud = document.getElementById("hud");
     if (hud) hud.hidden = false;
+    document.getElementById("app").classList.add("playing");
     state.playing = true;
     if (window.DemoAudio) {
       window.DemoAudio.unlock();
@@ -243,7 +249,9 @@
   }
 
   function setMenu(on) {
-    document.getElementById("app").classList.toggle("menu-on", on);
+    const app = document.getElementById("app");
+    app.classList.toggle("menu-on", on);
+    if (!on) app.classList.add("playing");
     if (el.textbox) el.textbox.hidden = on;
     const hud = document.getElementById("hud");
     if (hud) hud.hidden = on;
@@ -266,6 +274,7 @@
     el.title.hidden = false;
     el.about.hidden = true;
     el.log.hidden = true;
+    document.getElementById("app").classList.remove("playing");
     setMenu(true);
     const cont = document.getElementById("btn-continue");
     if (cont) cont.classList.toggle("off", !localStorage.getItem(SAVE_KEY));
@@ -312,10 +321,10 @@
 
   function escapeHtml(s) {
     return String(s)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll("\n", "<br>");
+      .split("&").join("&amp;")
+      .split("<").join("&lt;")
+      .split(">").join("&gt;")
+      .split("\n").join("<br>");
   }
 
   el.textbox.addEventListener("click", advance);
