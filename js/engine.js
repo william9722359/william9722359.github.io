@@ -220,6 +220,9 @@
 
   function startGame(fromSave) {
     hideAllScreens();
+    if (el.textbox) el.textbox.hidden = false;
+    const hud = document.getElementById("hud");
+    if (hud) hud.hidden = false;
     state.playing = true;
     if (window.DemoAudio) {
       window.DemoAudio.unlock();
@@ -239,10 +242,19 @@
     }
   }
 
+  function setMenu(on) {
+    document.getElementById("app").classList.toggle("menu-on", on);
+    if (el.textbox) el.textbox.hidden = on;
+    const hud = document.getElementById("hud");
+    if (hud) hud.hidden = on;
+    if (on) el.choices.hidden = true;
+  }
+
   function hideAllScreens() {
     el.title.hidden = true;
     el.about.hidden = true;
     el.log.hidden = true;
+    setMenu(false);
   }
 
   function showTitle() {
@@ -254,7 +266,9 @@
     el.title.hidden = false;
     el.about.hidden = true;
     el.log.hidden = true;
-    document.getElementById("btn-continue").disabled = !localStorage.getItem(SAVE_KEY);
+    setMenu(true);
+    const cont = document.getElementById("btn-continue");
+    if (cont) cont.classList.toggle("off", !localStorage.getItem(SAVE_KEY));
     if (window.DemoAudio) window.DemoAudio.playBgm("title");
   }
 
@@ -287,6 +301,7 @@
   }
 
   function openLog() {
+    setMenu(true);
     el.log.hidden = false;
     el.logBody.innerHTML = state.history.map((h) => {
       const name = h.name ? `<b>${escapeHtml(h.name)}</b>` : "";
@@ -306,9 +321,19 @@
   el.textbox.addEventListener("click", advance);
   document.getElementById("stage").addEventListener("click", (e) => {
     if (!state.playing) return;
-    if (e.target.closest("#quick, #choices, #textbox")) return;
+    if (e.target.closest("#quick, #choices, #textbox, #title, #about, #log")) return;
     advance();
   });
+
+  function onTitleTap(id, fn) {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fn(e);
+    });
+  }
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -347,16 +372,20 @@
     if (act === "title") showTitle();
   });
 
-  document.getElementById("btn-start").addEventListener("click", () => startGame(false));
-  document.getElementById("btn-continue").addEventListener("click", () => {
+  onTitleTap("btn-start", () => startGame(false));
+  onTitleTap("btn-continue", () => {
     if (load()) startGame(true);
   });
-  document.getElementById("btn-about").addEventListener("click", () => {
+  onTitleTap("btn-about", () => {
     el.title.hidden = true;
     el.about.hidden = false;
+    setMenu(true);
   });
-  document.getElementById("btn-about-back").addEventListener("click", showTitle);
-  document.getElementById("btn-log-close").addEventListener("click", () => { el.log.hidden = true; });
+  onTitleTap("btn-about-back", showTitle);
+  document.getElementById("btn-log-close").addEventListener("click", () => {
+    el.log.hidden = true;
+    setMenu(!state.playing);
+  });
 
   ["classroom","campus","mrt","room","dusk"].forEach((k) => {
     const i = new Image();
