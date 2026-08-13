@@ -6,13 +6,15 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#050506" />
-  <title>你都不心領</title>
+  <title>你都不心領　體驗版</title>
   <style>
-    .screen[hidden], .title-screen[hidden] { display: none !important; pointer-events: none !important; }
+    .screen[hidden], .title-screen[hidden], #chapter-card[hidden], #endcard[hidden] { display: none !important; pointer-events: none !important; }
     #app.playing #title, #app.playing #about { display: none !important; pointer-events: none !important; }
     #app.menu-on #hud, #app.menu-on #textbox, #app.menu-on #choices { display: none !important; pointer-events: none !important; }
+    #app.hide-ui #hud, #app.hide-ui #textbox, #app.hide-ui #choices { visibility: hidden; pointer-events: none; }
+    #app.card-on #hud, #app.card-on #textbox, #app.card-on #choices { display: none !important; pointer-events: none !important; }
   </style>
-  <link rel="stylesheet" href="css/style.css?v=6" />
+  <link rel="stylesheet" href="css/style.css?v=8" />
 </head>
 <body>
   <div id="app" class="menu-on">
@@ -22,16 +24,20 @@
       <div id="sprites" class="layer">
         <img id="sprite" alt="" hidden />
       </div>
+      <div id="fade" class="layer"></div>
 
       <header id="hud" hidden>
         <div id="chapter"></div>
         <nav id="quick">
-          <button type="button" data-audio="bgm">音樂　開</button>
-          <button type="button" data-audio="se">音效　開</button>
-          <button type="button" data-act="log">回想</button>
           <button type="button" data-act="auto" id="btn-auto">自動</button>
           <button type="button" data-act="skip" id="btn-skip">快進</button>
+          <button type="button" data-act="log">回想</button>
+          <button type="button" data-act="qsave">Q.存</button>
+          <button type="button" data-act="qload">Q.讀</button>
           <button type="button" data-act="save">存檔</button>
+          <button type="button" data-act="load">讀檔</button>
+          <button type="button" data-act="hide">隱藏</button>
+          <button type="button" data-act="config">設定</button>
           <button type="button" data-act="title">標題</button>
         </nav>
       </header>
@@ -44,8 +50,15 @@
         <div id="clicker" hidden>▼</div>
       </div>
 
+      <section id="chapter-card" hidden>
+        <p class="card-kicker">體驗版</p>
+        <h2 id="card-title"></h2>
+        <p class="card-hint">點擊繼續</p>
+      </section>
+
       <section id="title" class="screen title-screen">
         <div class="title-copy">
+          <p class="badge">體驗版</p>
           <p class="kicker">從一開始就站在你這一邊</p>
           <h1>
             <span class="t1">你都</span>
@@ -54,24 +67,72 @@
           <p class="sub">天主教國立輔仁大學<br />應用美術學系</p>
         </div>
         <div class="title-actions">
-          <button type="button" id="btn-start">開始</button>
-          <button type="button" id="btn-continue">繼續</button>
-          <button type="button" id="btn-about">關於</button>
-          <div class="audio-row">
-            <button type="button" data-audio="bgm">音樂　開</button>
-            <button type="button" data-audio="se">音效　開</button>
-          </div>
+          <button type="button" id="btn-start">開始遊戲</button>
+          <button type="button" id="btn-continue">繼續遊戲</button>
+          <button type="button" id="btn-config">環境設定</button>
+          <button type="button" id="btn-about">關於作品</button>
         </div>
+        <p class="copy">體驗版　共通線開頭</p>
       </section>
 
       <section id="about" class="screen" hidden>
         <div class="panel">
-          <h2>關於</h2>
+          <h2>關於作品</h2>
           <p>玩家是劉赫。我們只下指示，願望由你走完。</p>
-          <p>標題取自他寫過的那句：從一開始就站在你這一邊，你都不心領。</p>
-          <p>對白來自原文：鄰座「嗯」、重逢「好久不見」、網遊隊友、展後捷運上的模糊告白。個人線尚未實裝。</p>
-          <p>若一路不心領，阿龍陳會說「時間差不多了」。</p>
+          <p>這份體驗版收的是共通線開頭：鄰座、開學重逢、夜間組隊，以及冬季展覽之後的那一站。</p>
+          <p>對白取自原文。個人線尚未收入。</p>
+          <p>操作：點擊／空白鍵／Enter 送行。Ctrl 長按快進。右鍵隱藏介面。</p>
           <button type="button" id="btn-about-back">返回</button>
+        </div>
+      </section>
+
+      <section id="config" class="screen" hidden>
+        <div class="panel">
+          <h2>環境設定</h2>
+          <div class="cfg-row">
+            <span>文字速度</span>
+            <div class="cfg-opts" data-cfg="speed">
+              <button type="button" data-val="40">慢</button>
+              <button type="button" data-val="26">中</button>
+              <button type="button" data-val="14">快</button>
+            </div>
+          </div>
+          <div class="cfg-row">
+            <span>自動等待</span>
+            <div class="cfg-opts" data-cfg="auto">
+              <button type="button" data-val="1600">長</button>
+              <button type="button" data-val="900">中</button>
+              <button type="button" data-val="500">短</button>
+            </div>
+          </div>
+          <div class="cfg-row">
+            <span>快進範圍</span>
+            <div class="cfg-opts" data-cfg="skipMode">
+              <button type="button" data-val="read">既讀</button>
+              <button type="button" data-val="all">全部</button>
+            </div>
+          </div>
+          <div class="cfg-row">
+            <span>音樂</span>
+            <div class="cfg-opts">
+              <button type="button" data-audio="bgm">音樂　開</button>
+            </div>
+          </div>
+          <div class="cfg-row">
+            <span>音效</span>
+            <div class="cfg-opts">
+              <button type="button" data-audio="se">音效　開</button>
+            </div>
+          </div>
+          <button type="button" id="btn-config-back">返回</button>
+        </div>
+      </section>
+
+      <section id="saves" class="screen" hidden>
+        <div class="panel save-panel">
+          <h2 id="saves-title">存檔</h2>
+          <div id="save-list"></div>
+          <button type="button" id="btn-saves-back">返回</button>
         </div>
       </section>
 
@@ -83,12 +144,24 @@
         </div>
       </section>
 
+      <section id="endcard" class="screen" hidden>
+        <div class="panel end-panel">
+          <p class="badge">體驗版終</p>
+          <h2>體驗版到此為止</h2>
+          <p>共通線的開頭，你已經走完了。</p>
+          <p>選擇已經記下。產品版會接著走完各自的路。</p>
+          <p>願望還是要你自己走完。</p>
+          <button type="button" id="btn-end-title">返回標題</button>
+        </div>
+      </section>
+
       <section id="toast" hidden></section>
     </div>
   </div>
-  <script src="js/script.js?v=6"></script>
-  <script src="js/audio.js?v=6"></script>
-  <script src="js/engine.js?v=6"></script>
-  <script src="js/assets-bg.js?v=6"></script>
+  <script src="js/script.js?v=8"></script>
+  <script src="js/audio.js?v=8"></script>
+  <script src="js/assets-bg.js?v=8"></script>
+  <script src="js/assets-chara.js?v=8"></script>
+  <script src="js/engine.js?v=8"></script>
 </body>
 </html>

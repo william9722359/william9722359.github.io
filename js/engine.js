@@ -6,6 +6,11 @@
     return;
   }
   const SAVE_KEY = "liuhe-demo-v1";
+  const SLOT_KEY = "liuhe-demo-slot-";
+  const QSAVE_KEY = "liuhe-demo-qsave";
+  const CFG_KEY = "liuhe-demo-cfg";
+  const READ_KEY = "liuhe-demo-read";
+  const SLOT_MAX = 6;
   const PACK = window.DEMO_ASSETS || { bg: {}, chara: {} };
   const BGS = {
     black: "",
@@ -24,6 +29,7 @@
   };
 
   const el = {
+    app: document.getElementById("app"),
     bg: document.getElementById("bg"),
     sprite: document.getElementById("sprite"),
     name: document.getElementById("nameplate"),
@@ -34,35 +40,70 @@
     textbox: document.getElementById("textbox"),
     title: document.getElementById("title"),
     about: document.getElementById("about"),
+    config: document.getElementById("config"),
+    saves: document.getElementById("saves"),
+    saveList: document.getElementById("save-list"),
+    savesTitle: document.getElementById("saves-title"),
     log: document.getElementById("log"),
     logBody: document.getElementById("log-body"),
     toast: document.getElementById("toast"),
     btnAuto: document.getElementById("btn-auto"),
-    btnSkip: document.getElementById("btn-skip")
+    btnSkip: document.getElementById("btn-skip"),
+    fade: document.getElementById("fade"),
+    chapterCard: document.getElementById("chapter-card"),
+    cardTitle: document.getElementById("card-title"),
+    endcard: document.getElementById("endcard"),
+    hud: document.getElementById("hud")
   };
+
+  const cfg = { speed: 26, auto: 900, skipMode: "read" };
+  try {
+    const c = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
+    if (c.speed) cfg.speed = c.speed;
+    if (c.auto) cfg.auto = c.auto;
+    if (c.skipMode === "all" || c.skipMode === "read") cfg.skipMode = c.skipMode;
+  } catch (_) { /* keep */ }
 
   const state = {
     id: "start",
     flags: { wei: 0, yang: 0, jiang: 0, li: 0 },
     history: [],
+    read: new Set(),
     typing: false,
     full: "",
     shown: 0,
     auto: false,
     skip: false,
+    ctrlSkip: false,
     playing: false,
+    fading: false,
     timer: null,
     autoTimer: null,
     screen: "title",
-    lockUntil: 0
+    lockUntil: 0,
+    saveMode: "save",
+    returnScreen: "title",
+    lastBg: "black",
+    lastChapter: ""
   };
 
+  try {
+    const raw = JSON.parse(localStorage.getItem(READ_KEY) || "[]");
+    if (Array.isArray(raw)) raw.forEach((id) => state.read.add(id));
+  } catch (_) { /* keep */ }
+
   function locked() {
-    return Date.now() < state.lockUntil;
+    return Date.now() < state.lockUntil || state.fading;
   }
 
   function lockInput(ms) {
     state.lockUntil = Date.now() + ms;
+  }
+
+  function persistRead() {
+    try {
+      localStorage.setItem(READ_KEY, JSON.stringify(Array.from(state.read)));
+    } catch (_) { /* ignore quota */ }
   }
 
   function toast(msg) {
@@ -82,6 +123,7 @@
       el.bg.style.backgroundColor = "#000";
     }
     el.bg.classList.toggle("memory", !!memory);
+    if (key !== undefined) state.lastBg = key;
   }
 
   function setSprite(name, cls) {
@@ -108,12 +150,42 @@
     el.line.textContent = state.full;
     state.shown = state.full.length;
     el.clicker.hidden = false;
-    if (state.auto) queueAuto();
+    if (skipActive()) queueSkip();
+    else if (state.auto) queueAuto();
   }
 
   function queueAuto() {
     clearTimeout(state.autoTimer);
-    state.autoTimer = setTimeout(() => advance(), 900);
+    state.autoTimer = setTimeout(() => advance(), cfg.auto);
+  }
+
+  function skipActive() {
+    return state.ctrlSkip || state.skip;
+  }
+
+  function stopSkipButton() {
+    state.skip = false;
+    if (el.btnSkip) el.btnSkip.classList.remove("on");
+  }
+
+  function canSkipThrough() {
+    const node = SCRIPT[state.id];
+    if (!node || node.choices || node.next === null || node.card || node.endcard) return false;
+    if (state.ctrlSkip) return true;
+    if (!state.skip) return false;
+    if (cfg.skipMode === "all") return true;
+    return state.read.has(node.next);
+  }
+
+  function queueSkip() {
+    clearTimeout(state.autoTimer);
+    if (!canSkipThrough()) {
+      if (state.skip && !state.ctrlSkip) stopSkipButton();
+      return;
+    }
+    state.autoTimer = setTimeout(() => {
+      if (skipActive()) advance();
+    }, 28);
   }
 
   function typeText(text) {
@@ -124,7 +196,7 @@
     state.typing = true;
     el.line.textContent = "";
     el.clicker.hidden = true;
-    if (state.skip) {
+    if (skipActive()) {
       showFull();
       return;
     }
@@ -132,7 +204,7 @@
       state.shown += 1;
       el.line.textContent = state.full.slice(0, state.shown);
       if (state.shown >= state.full.length) showFull();
-    }, 26);
+    }, cfg.speed);
   }
 
   function applyNode(node) {
@@ -154,10 +226,11 @@
     el.choices.hidden = false;
     el.choices.innerHTML = "";
     el.clicker.hidden = true;
-    list.forEach((c) => {
+    stopSkipButton();
+    list.forEach((c, i) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = c.text;
+      b.innerHTML = "<i>" + (i + 1) + "</i><span>" + escapeHtml(c.text) + "</span>";
       b.addEventListener("pointerup", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -177,72 +250,152 @@
     return state.flags.wei + state.flags.yang + state.flags.jiang + state.flags.li;
   }
 
+  function fadeThen(fn) {
+    if (!el.fade) {
+      fn();
+      return;
+    }
+    state.fading = true;
+    el.fade.classList.add("on");
+    setTimeout(() => {
+      fn();
+      requestAnimationFrame(() => {
+        el.fade.classList.remove("on");
+        setTimeout(() => { state.fading = false; }, 280);
+      });
+    }, 260);
+  }
+
+  function showChapterCard(node) {
+    el.app.classList.add("card-on");
+    if (el.textbox) el.textbox.hidden = true;
+    el.chapterCard.hidden = false;
+    el.cardTitle.textContent = node.chapter || "";
+    state.screen = "card";
+    lockInput(360);
+    if (window.DemoAudio) window.DemoAudio.cueFrom({ bg: "black" }, true);
+  }
+
+  function closeChapterCard() {
+    if (state.screen !== "card" || el.chapterCard.hidden) return;
+    if (locked()) return;
+    const node = SCRIPT[state.id];
+    el.chapterCard.hidden = true;
+    el.app.classList.remove("card-on");
+    if (el.textbox) el.textbox.hidden = false;
+    state.screen = "play";
+    if (node && node.next) go(node.next);
+  }
+
+  function showEndCard() {
+    stopType();
+    clearTimeout(state.autoTimer);
+    state.playing = false;
+    state.skip = false;
+    state.ctrlSkip = false;
+    el.choices.hidden = true;
+    if (el.chapterCard) el.chapterCard.hidden = true;
+    el.app.classList.remove("card-on");
+    hideOverlays();
+    el.title.hidden = true;
+    el.endcard.hidden = false;
+    state.screen = "end";
+    setMenu(true);
+    if (window.DemoAudio) window.DemoAudio.playBgm("title");
+  }
+
   function go(id) {
     if (!id) {
-      endDemo();
+      showEndCard();
       return;
     }
     const node = SCRIPT[id];
     if (!node) {
-      endDemo();
+      showEndCard();
       return;
     }
     if (node.gate) {
       go(reachedCount() === 0 ? "long1" : "ending");
       return;
     }
-    state.id = id;
-    applyNode(node);
-    if (window.DemoAudio) window.DemoAudio.cueFrom(node, true);
-    const text = node.text || "";
-    if (text) {
-      state.history.push({
-        name: node.name || "",
-        text
-      });
-    }
-    typeText(text);
-    if (node.choices) {
-      stopType();
-      el.line.textContent = text;
-      state.typing = false;
-      showChoices(node.choices);
-      state.screen = "choice";
-    } else if (state.playing) {
-      state.screen = "play";
+
+    const bgChanged = node.bg !== undefined && node.bg !== state.lastBg;
+    const needFade = state.playing && (bgChanged || node.card || node.endcard);
+
+    const apply = () => {
+      state.id = id;
+      if (node.chapter && node.chapter !== state.lastChapter) {
+        state.lastChapter = node.chapter;
+        writeQSave(true);
+      }
+      if (node.endcard) {
+        showEndCard();
+        return;
+      }
+      if (node.card) {
+        applyNode(node);
+        showChapterCard(node);
+        return;
+      }
+      applyNode(node);
+      if (window.DemoAudio) window.DemoAudio.cueFrom(node, true);
+      const text = node.text || "";
+      if (text) {
+        state.history.push({
+          name: node.name || "",
+          text
+        });
+      }
+      state.read.add(id);
+      persistRead();
+      typeText(text);
+      if (node.choices) {
+        stopType();
+        el.line.textContent = text;
+        state.typing = false;
+        showChoices(node.choices);
+        state.screen = "choice";
+      } else if (state.playing) {
+        state.screen = "play";
+      }
+    };
+
+    if (needFade) {
+      lockInput(400);
+      fadeThen(apply);
+    } else {
+      apply();
     }
   }
 
   function advance() {
+    if (state.screen === "card") {
+      closeChapterCard();
+      return;
+    }
     if (state.screen !== "play" || !state.playing || locked()) return;
     if (!el.choices.hidden) return;
     if (state.typing) {
       showFull();
-      if (window.DemoAudio) window.DemoAudio.playSe("click");
+      if (!skipActive() && window.DemoAudio) window.DemoAudio.playSe("click");
       return;
     }
     const node = SCRIPT[state.id];
     if (!node) return;
     if (node.next === null) {
-      endDemo();
+      showEndCard();
       return;
     }
-    if (!state.skip && window.DemoAudio) window.DemoAudio.playSe("click");
+    if (!skipActive() && window.DemoAudio) window.DemoAudio.playSe("click");
     go(node.next);
-  }
-
-  function endDemo() {
-    state.playing = false;
-    toast("指示暫停");
-    setTimeout(showTitle, 700);
   }
 
   function startGame(fromSave) {
     hideAllScreens();
     if (el.textbox) el.textbox.hidden = false;
-    const hud = document.getElementById("hud");
-    if (hud) hud.hidden = false;
-    document.getElementById("app").classList.add("playing");
+    if (el.hud) el.hud.hidden = false;
+    el.app.classList.add("playing");
+    el.app.classList.remove("card-on");
     state.playing = true;
     state.screen = "play";
     lockInput(500);
@@ -252,31 +405,41 @@
     }
     state.auto = false;
     state.skip = false;
-    el.btnAuto.classList.remove("on");
-    el.btnSkip.classList.remove("on");
+    state.ctrlSkip = false;
+    if (el.btnAuto) el.btnAuto.classList.remove("on");
+    if (el.btnSkip) el.btnSkip.classList.remove("on");
     if (fromSave) {
       go(state.id);
     } else {
       state.id = "start";
       state.flags = { wei: 0, yang: 0, jiang: 0, li: 0 };
       state.history = [];
+      state.lastChapter = "";
       go("start");
     }
   }
 
   function setMenu(on) {
-    const app = document.getElementById("app");
-    app.classList.toggle("menu-on", on);
-    app.classList.toggle("playing", !on);
+    el.app.classList.toggle("menu-on", on);
+    el.app.classList.toggle("playing", !on);
     if (el.textbox) el.textbox.hidden = on;
-    const hud = document.getElementById("hud");
-    if (hud) hud.hidden = on;
+    if (el.hud) el.hud.hidden = on;
+  }
+
+  function hideOverlays() {
+    el.about.hidden = true;
+    if (el.config) el.config.hidden = true;
+    if (el.saves) el.saves.hidden = true;
+    el.log.hidden = true;
+    if (el.endcard) el.endcard.hidden = true;
+    if (el.chapterCard) el.chapterCard.hidden = true;
+    el.app.classList.remove("hide-ui");
+    el.app.classList.remove("card-on");
   }
 
   function hideAllScreens() {
     el.title.hidden = true;
-    el.about.hidden = true;
-    el.log.hidden = true;
+    hideOverlays();
     setMenu(false);
   }
 
@@ -285,44 +448,176 @@
     clearTimeout(state.autoTimer);
     state.playing = false;
     state.skip = false;
+    state.ctrlSkip = false;
     el.choices.hidden = true;
+    hideOverlays();
     el.title.hidden = false;
-    el.about.hidden = true;
-    el.log.hidden = true;
     state.screen = "title";
-    document.getElementById("app").classList.remove("playing");
+    el.app.classList.remove("playing");
     setMenu(true);
     const cont = document.getElementById("btn-continue");
-    if (cont) cont.classList.toggle("off", !localStorage.getItem(SAVE_KEY));
+    if (cont) cont.classList.toggle("off", !hasAnySave());
     if (window.DemoAudio) window.DemoAudio.playBgm("title");
   }
 
-  function save() {
-    if (!state.playing) return;
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
+  function slotKey(n) { return SLOT_KEY + n; }
+
+  function snapshot() {
+    return {
       id: state.id,
       flags: state.flags,
-      history: state.history
-    }));
-    toast("已記下");
+      history: state.history,
+      chapter: el.chapter.textContent || "",
+      at: Date.now()
+    };
   }
 
-  function load() {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) {
-      toast("沒有存檔");
-      return false;
-    }
+  function readSlot(n) {
     try {
-      const data = JSON.parse(raw);
-      state.id = data.id || "start";
-      state.flags = Object.assign({ wei: 0, yang: 0, jiang: 0, li: 0 }, data.flags);
-      state.history = data.history || [];
-      return true;
+      const raw = localStorage.getItem(slotKey(n)) || localStorage.getItem(n === 1 ? SAVE_KEY : "");
+      return raw ? JSON.parse(raw) : null;
     } catch {
-      toast("存檔讀不了");
-      return false;
+      return null;
     }
+  }
+
+  function writeSlot(n) {
+    const data = snapshot();
+    localStorage.setItem(slotKey(n), JSON.stringify(data));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  }
+
+  function writeQSave(silent) {
+    if (!state.playing && !silent) return;
+    localStorage.setItem(QSAVE_KEY, JSON.stringify(snapshot()));
+    if (!silent) toast("快速存檔");
+  }
+
+  function readQSave() {
+    try {
+      const raw = localStorage.getItem(QSAVE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function applySave(data) {
+    state.id = data.id || "start";
+    state.flags = Object.assign({ wei: 0, yang: 0, jiang: 0, li: 0 }, data.flags);
+    state.history = data.history || [];
+    state.lastChapter = data.chapter || "";
+  }
+
+  function hasAnySave() {
+    if (readQSave()) return true;
+    for (let n = 1; n <= SLOT_MAX; n += 1) {
+      if (readSlot(n)) return true;
+    }
+    return false;
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return "空";
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "/" + p(d.getMonth() + 1) + "/" + p(d.getDate()) + "　" + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
+  function openSaves(mode, from) {
+    state.saveMode = mode;
+    state.returnScreen = from || state.screen;
+    state.screen = "saves";
+    el.savesTitle.textContent = mode === "save" ? "存檔" : "讀檔";
+    el.saves.hidden = false;
+    el.saveList.innerHTML = "";
+
+    const q = document.createElement("button");
+    q.type = "button";
+    q.className = "save-slot q";
+    const qdata = readQSave();
+    q.innerHTML = qdata
+      ? "<b>快速存檔</b><span>" + escapeHtml(qdata.chapter || "進行中") + "　" + fmtTime(qdata.at) + "</span>"
+      : "<b>快速存檔</b><span>空</span>";
+    q.addEventListener("pointerup", (e) => {
+      e.stopPropagation();
+      if (mode === "save") {
+        if (!state.playing) return;
+        writeQSave(false);
+        closeSaves();
+      } else if (qdata) {
+        applySave(qdata);
+        el.saves.hidden = true;
+        startGame(true);
+      } else {
+        toast("還沒有快速存檔");
+      }
+    });
+    el.saveList.appendChild(q);
+
+    for (let n = 1; n <= SLOT_MAX; n += 1) {
+      const data = readSlot(n);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "save-slot";
+      b.innerHTML = data
+        ? "<b>第 " + n + " 格</b><span>" + escapeHtml(data.chapter || "進行中") + "　" + fmtTime(data.at) + "</span>"
+        : "<b>第 " + n + " 格</b><span>空</span>";
+      b.addEventListener("pointerup", (e) => {
+        e.stopPropagation();
+        if (mode === "save") {
+          if (!state.playing) return;
+          writeSlot(n);
+          toast("已存到第 " + n + " 格");
+          closeSaves();
+        } else if (data) {
+          applySave(data);
+          el.saves.hidden = true;
+          startGame(true);
+        } else {
+          toast("這一格是空的");
+        }
+      });
+      el.saveList.appendChild(b);
+    }
+  }
+
+  function closeSaves() {
+    el.saves.hidden = true;
+    if (state.playing && state.returnScreen !== "title") {
+      state.screen = el.choices.hidden ? "play" : "choice";
+    } else {
+      showTitle();
+    }
+  }
+
+  function openConfig(from) {
+    state.returnScreen = from || state.screen;
+    state.screen = "config";
+    el.config.hidden = false;
+    document.querySelectorAll("[data-cfg]").forEach((row) => {
+      const key = row.dataset.cfg;
+      row.querySelectorAll("button").forEach((b) => {
+        const same = key === "skipMode"
+          ? b.dataset.val === cfg[key]
+          : Number(b.dataset.val) === cfg[key];
+        b.classList.toggle("on", same);
+      });
+    });
+    if (window.DemoAudio) window.DemoAudio.bind();
+  }
+
+  function closeConfig() {
+    el.config.hidden = true;
+    if (state.playing && state.returnScreen !== "title") {
+      state.screen = el.choices.hidden ? "play" : "choice";
+    } else {
+      showTitle();
+    }
+  }
+
+  function persistCfg() {
+    localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   }
 
   function openLog() {
@@ -333,6 +628,11 @@
       return `<div class="log-item">${name}${escapeHtml(h.text)}</div>`;
     }).join("") || "<p>還沒有對白。</p>";
     el.logBody.scrollTop = el.logBody.scrollHeight;
+  }
+
+  function closeLog() {
+    el.log.hidden = true;
+    state.screen = state.playing ? (el.choices.hidden ? "play" : "choice") : "title";
   }
 
   function escapeHtml(s) {
@@ -352,27 +652,66 @@
     });
   }
 
+  function resumePlayScreen() {
+    state.screen = el.choices.hidden ? "play" : "choice";
+  }
+
   el.textbox.addEventListener("pointerup", (e) => {
     e.stopPropagation();
     advance();
   });
   document.getElementById("stage").addEventListener("pointerup", (e) => {
-    if (e.target.closest("button, #quick, #choices, #textbox, #title, #about, #log")) return;
+    if (el.app.classList.contains("hide-ui")) {
+      el.app.classList.remove("hide-ui");
+      resumePlayScreen();
+      return;
+    }
+    if (e.target.closest("button, #quick, #choices, #textbox, #title, #about, #log, #config, #saves, #endcard, #chapter-card")) return;
+    if (state.screen === "card") {
+      closeChapterCard();
+      return;
+    }
     advance();
   });
 
+  document.addEventListener("contextmenu", (e) => {
+    if (!state.playing || state.screen === "title") return;
+    e.preventDefault();
+    if (el.app.classList.contains("hide-ui")) {
+      el.app.classList.remove("hide-ui");
+      resumePlayScreen();
+    } else {
+      el.app.classList.add("hide-ui");
+      state.screen = "hidden";
+    }
+  });
+
+  document.addEventListener("wheel", (e) => {
+    if (!state.playing) return;
+    if (e.deltaY < 0 && el.log.hidden && state.screen !== "saves" && state.screen !== "config") {
+      openLog();
+    }
+  }, { passive: true });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (!el.log.hidden) {
-        el.log.hidden = true;
-        state.screen = state.playing ? (el.choices.hidden ? "play" : "choice") : "title";
-        return;
-      }
+      if (!el.log.hidden) { closeLog(); return; }
+      if (el.config && !el.config.hidden) { closeConfig(); return; }
+      if (el.saves && !el.saves.hidden) { closeSaves(); return; }
       if (!el.about.hidden) { showTitle(); return; }
+      if (el.endcard && !el.endcard.hidden) { showTitle(); return; }
       showTitle();
       return;
     }
-    if (e.key === "Control") state.skip = true;
+    if (e.key === "Control") {
+      state.ctrlSkip = true;
+      if (state.typing && state.screen === "play") showFull();
+    }
+    if (state.screen === "card" && (e.key === " " || e.key === "Enter" || e.key === "z" || e.key === "Z")) {
+      e.preventDefault();
+      closeChapterCard();
+      return;
+    }
     if (state.screen !== "play") return;
     if (e.key === " " || e.key === "Enter" || e.key === "z" || e.key === "Z") {
       e.preventDefault();
@@ -380,7 +719,7 @@
     }
   });
   document.addEventListener("keyup", (e) => {
-    if (e.key === "Control") state.skip = false;
+    if (e.key === "Control") state.ctrlSkip = false;
   });
 
   document.getElementById("quick").addEventListener("pointerup", (e) => {
@@ -393,19 +732,46 @@
       state.auto = !state.auto;
       btn.classList.toggle("on", state.auto);
       if (state.auto && !state.typing) queueAuto();
+      else clearTimeout(state.autoTimer);
     }
     if (act === "skip") {
       state.skip = !state.skip;
       btn.classList.toggle("on", state.skip);
       if (state.skip && state.typing) showFull();
     }
-    if (act === "save") save();
+    if (act === "qsave") writeQSave(false);
+    if (act === "qload") {
+      const data = readQSave();
+      if (!data) {
+        toast("還沒有快速存檔");
+        return;
+      }
+      applySave(data);
+      startGame(true);
+    }
+    if (act === "save") openSaves("save", "play");
+    if (act === "load") openSaves("load", "play");
+    if (act === "hide") {
+      el.app.classList.add("hide-ui");
+      state.screen = "hidden";
+    }
+    if (act === "config") openConfig("play");
     if (act === "title") showTitle();
   });
 
   onTap(document.getElementById("btn-start"), () => startGame(false));
   onTap(document.getElementById("btn-continue"), () => {
-    if (load()) startGame(true);
+    if (!hasAnySave()) {
+      toast("還沒有存檔");
+      return;
+    }
+    el.title.hidden = true;
+    openSaves("load", "title");
+  });
+  onTap(document.getElementById("btn-config"), () => {
+    el.title.hidden = true;
+    setMenu(true);
+    openConfig("title");
   });
   onTap(document.getElementById("btn-about"), () => {
     el.title.hidden = true;
@@ -414,12 +780,13 @@
     setMenu(true);
   });
   onTap(document.getElementById("btn-about-back"), showTitle);
-  onTap(document.getElementById("btn-log-close"), () => {
-    el.log.hidden = true;
-    state.screen = state.playing ? (el.choices.hidden ? "play" : "choice") : "title";
-  });
+  onTap(document.getElementById("btn-config-back"), closeConfig);
+  onTap(document.getElementById("btn-saves-back"), closeSaves);
+  onTap(document.getElementById("btn-log-close"), closeLog);
+  onTap(document.getElementById("btn-end-title"), showTitle);
+  onTap(el.chapterCard, closeChapterCard);
 
-  ["classroom","campus","mrt","room","dusk"].forEach((k) => {
+  ["classroom", "campus", "mrt", "room", "dusk"].forEach((k) => {
     const i = new Image();
     i.src = BGS[k];
   });
@@ -433,6 +800,18 @@
       s.style.backgroundImage = `url("${BGS.dusk}")`;
     });
   }
+
+  document.querySelectorAll("[data-cfg]").forEach((row) => {
+    row.addEventListener("pointerup", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      e.stopPropagation();
+      const key = row.dataset.cfg;
+      cfg[key] = key === "skipMode" ? b.dataset.val : Number(b.dataset.val);
+      persistCfg();
+      row.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    });
+  });
 
   if (window.DemoAudio) window.DemoAudio.bind();
   showTitle();

@@ -241,15 +241,19 @@ window.DemoAudio = (() => {
     });
   }
 
+  let bound = false;
   function bind() {
-    document.addEventListener("pointerdown", unlock, { once: true });
-    document.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-audio]");
-      if (!b) return;
-      e.stopPropagation();
-      if (b.dataset.audio === "bgm") setBgm(!bgmOn.value);
-      if (b.dataset.audio === "se") setSe(!seOn.value);
-    });
+    if (!bound) {
+      bound = true;
+      document.addEventListener("pointerdown", unlock, { once: true });
+      document.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-audio]");
+        if (!b) return;
+        e.stopPropagation();
+        if (b.dataset.audio === "bgm") setBgm(!bgmOn.value);
+        if (b.dataset.audio === "se") setSe(!seOn.value);
+      });
+    }
     syncButtons();
   }
 
