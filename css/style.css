@@ -219,6 +219,12 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
   isolation: isolate;
 }
 
+.screen[hidden],
+.title-screen[hidden] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 .screen::before {
   content: "";
   position: absolute;
@@ -331,10 +337,14 @@ button.off { opacity: 0.45; }
   border: 1px solid var(--line);
   letter-spacing: 0.16em;
   font-size: 14px;
+  z-index: 50;
 }
 
-#stage.playing #title,
-#stage.playing #about { display: none; }
+#app.playing #title,
+#app.playing #about {
+  display: none !important;
+  pointer-events: none !important;
+}
 
 @media (max-width: 820px), (orientation: portrait) {
   #stage {
