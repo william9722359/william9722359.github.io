@@ -70,11 +70,13 @@
     hud: document.getElementById("hud")
   };
 
-  const cfg = { speed: 26, auto: 900, skipMode: "read" };
+  const cfg = { speed: 48, auto: 1600, skipMode: "read" };
   try {
     const c = JSON.parse(localStorage.getItem(CFG_KEY) || "{}");
-    if (c.speed) cfg.speed = c.speed;
-    if (c.auto) cfg.auto = c.auto;
+    const speedMap = { 14: 28, 26: 48, 40: 72 };
+    const autoMap = { 500: 1000, 900: 1600, 1600: 2400 };
+    if (c.speed) cfg.speed = speedMap[c.speed] || c.speed;
+    if (c.auto) cfg.auto = autoMap[c.auto] || c.auto;
     if (c.skipMode === "all" || c.skipMode === "read") cfg.skipMode = c.skipMode;
   } catch (_) { /* keep */ }
 
@@ -107,7 +109,9 @@
   } catch (_) { /* keep */ }
 
   function locked() {
-    return Date.now() < state.lockUntil || state.fading;
+    if (state.fading) return true;
+    if (skipActive()) return false;
+    return Date.now() < state.lockUntil;
   }
 
   function lockInput(ms) {
@@ -293,6 +297,7 @@
   function closeChapterCard() {
     if (state.screen !== "card" || el.chapterCard.hidden) return;
     if (locked()) return;
+    lockInput(350);
     const node = SCRIPT[state.id];
     el.chapterCard.hidden = true;
     el.app.classList.remove("card-on");
@@ -397,6 +402,7 @@
     if (!el.choices.hidden) return;
     if (state.typing) {
       showFull();
+      lockInput(320);
       if (!skipActive() && window.DemoAudio) window.DemoAudio.playSe("click");
       return;
     }
@@ -407,6 +413,7 @@
       return;
     }
     if (!skipActive() && window.DemoAudio) window.DemoAudio.playSe("click");
+    lockInput(280);
     go(node.next);
   }
 
@@ -418,7 +425,7 @@
     el.app.classList.remove("card-on");
     state.playing = true;
     state.screen = "play";
-    lockInput(500);
+    lockInput(700);
     if (window.DemoAudio) {
       window.DemoAudio.unlock();
       window.DemoAudio.playSe("start");
