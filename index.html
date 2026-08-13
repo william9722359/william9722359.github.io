@@ -7,7 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#050506" />
   <title>你都不心領</title>
-  <link rel="stylesheet" href="css/style.css?v=3" />
+  <style>
+    .screen[hidden], .title-screen[hidden] { display: none !important; pointer-events: none !important; }
+    #app.playing #title, #app.playing #about { display: none !important; pointer-events: none !important; }
+    #app.menu-on #hud, #app.menu-on #textbox, #app.menu-on #choices { display: none !important; pointer-events: none !important; }
+  </style>
+  <link rel="stylesheet" href="css/style.css?v=4" />
 </head>
 <body>
   <div id="app" class="menu-on">
@@ -81,10 +86,10 @@
       <section id="toast" hidden></section>
     </div>
   </div>
-  <script src="js/script.js?v=3"></script>
-  <script src="js/audio.js?v=3"></script>
-  <script src="js/engine.js?v=3"></script>
-  <script src="js/assets-bg.js?v=3"></script>
-  <script src="js/assets-chara.js?v=3"></script>
+  <script src="js/script.js?v=4"></script>
+  <script src="js/audio.js?v=4"></script>
+  <script src="js/engine.js?v=4"></script>
+  <script src="js/assets-bg.js?v=4"></script>
+  <script src="js/assets-chara.js?v=4"></script>
 </body>
 </html>
