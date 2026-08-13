@@ -248,7 +248,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; }
   display: grid;
   gap: 12px;
   pointer-events: auto;
-  z-index: 3;
+  z-index: 7;
 }
 
 #choices button {

@@ -115,7 +115,7 @@ window.DemoAudio = (() => {
       step += 1;
     }
     chord();
-    synthTimer = setInterval(chord, beat * 4000);
+    synthTimer = setInterval(chord, beat * 4);
   }
 
   function makeLoop(src) {

@@ -11,6 +11,20 @@
   const CFG_KEY = "liuhe-demo-cfg";
   const READ_KEY = "liuhe-demo-read";
   const SLOT_MAX = 6;
+  const LEGACY = {
+    wei11: "wei_choice",
+    wei12: "wei_choice",
+    wei_end2: "card_yang",
+    wei_more3: "wei_end",
+    wei_pass2: "wei_end",
+    yang_now2: "yang_end",
+    jiang7: "jiang_end",
+    jiang_more2: "jiang_more",
+    jiang_pass2: "jiang_end",
+    li_pass2: "end_gate",
+    check_long: "end_gate",
+    ending3: "ending2"
+  };
   const PACK = window.DEMO_ASSETS || { bg: {}, chara: {} };
   const BGS = {
     black: "",
@@ -311,7 +325,13 @@
     }
     const node = SCRIPT[id];
     if (!node) {
-      showEndCard();
+      if (LEGACY[id]) {
+        go(LEGACY[id]);
+        return;
+      }
+      toast("存檔對不上，從頭開始");
+      state.id = "start";
+      go("start");
       return;
     }
     if (node.gate) {
@@ -415,6 +435,7 @@
       state.flags = { wei: 0, yang: 0, jiang: 0, li: 0 };
       state.history = [];
       state.lastChapter = "";
+      state.lastBg = "black";
       go("start");
     }
   }
@@ -675,8 +696,10 @@
   });
 
   document.addEventListener("contextmenu", (e) => {
-    if (!state.playing || state.screen === "title") return;
     e.preventDefault();
+    if (e.button !== 2) return;
+    if (!state.playing) return;
+    if (state.screen !== "play" && state.screen !== "choice" && state.screen !== "hidden") return;
     if (el.app.classList.contains("hide-ui")) {
       el.app.classList.remove("hide-ui");
       resumePlayScreen();
@@ -688,9 +711,8 @@
 
   document.addEventListener("wheel", (e) => {
     if (!state.playing) return;
-    if (e.deltaY < 0 && el.log.hidden && state.screen !== "saves" && state.screen !== "config") {
-      openLog();
-    }
+    if (state.screen !== "play" && state.screen !== "choice") return;
+    if (e.deltaY < 0 && el.log.hidden) openLog();
   }, { passive: true });
 
   document.addEventListener("keydown", (e) => {
@@ -705,7 +727,15 @@
     }
     if (e.key === "Control") {
       state.ctrlSkip = true;
-      if (state.typing && state.screen === "play") showFull();
+      if (!e.repeat && state.screen === "play") {
+        if (state.typing) showFull();
+        else queueSkip();
+      }
+    }
+    if (state.screen === "choice" && e.key >= "1" && e.key <= "9") {
+      const btn = el.choices.querySelectorAll("button")[Number(e.key) - 1];
+      if (btn) btn.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      return;
     }
     if (state.screen === "card" && (e.key === " " || e.key === "Enter" || e.key === "z" || e.key === "Z")) {
       e.preventDefault();
@@ -737,7 +767,12 @@
     if (act === "skip") {
       state.skip = !state.skip;
       btn.classList.toggle("on", state.skip);
-      if (state.skip && state.typing) showFull();
+      if (state.skip) {
+        if (state.typing) showFull();
+        else queueSkip();
+      } else {
+        clearTimeout(state.autoTimer);
+      }
     }
     if (act === "qsave") writeQSave(false);
     if (act === "qload") {

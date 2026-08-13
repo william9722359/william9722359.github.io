@@ -9,14 +9,20 @@ window.DEMO_SCRIPT = {
     next: "s2"
   },
   s2: {
+    name: "指示",
+    who: "sys",
     text: "願望不會替你走完。\n我們只把路放到你面前。",
     next: "s3"
   },
   s3: {
+    name: "指示",
+    who: "sys",
     text: "天主教國立輔仁大學。新莊。\n應用美術學系。",
     next: "s4"
   },
   s4: {
+    name: "指示",
+    who: "sys",
     text: "今天從開學開始。",
     next: "card_wei"
   },
@@ -417,6 +423,8 @@ window.DEMO_SCRIPT = {
     next: "ending2"
   },
   ending2: {
+    name: "指示",
+    who: "sys",
     text: "願望還是要你自己走完。",
     next: "endcard"
   },
